@@ -1,0 +1,43 @@
+version: "3.8"
+
+services:
+  rtl-decoder:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: afsk_decoder
+    stdin_open: true
+    tty: true
+    privileged: true
+    volumes:
+      # Mount the scripts directory for easy development
+      - ./scripts:/app/scripts
+      - ./output:/app/output
+      # Mount USB devices for RTL-SDR access
+      - /dev/bus/usb:/dev/bus/usb
+    devices:
+      # Pass through USB devices (adjust as needed for your RTL-SDR)
+      - /dev/bus/usb
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+      # ==============================================
+      # SINGLE SOURCE OF TRUTH FOR DEFAULT VALUES
+      # ==============================================
+      # Change these values here to update defaults for the entire application
+      # Default frequency for AFSK1200 decoding
+      - DEFAULT_FREQ=460.800M
+      # Default sample rate (2.4 MSPS)
+      - DEFAULT_SAMPLE_RATE=2400000
+    working_dir: /app
+    command: bash
+    networks:
+      - decoder_network
+
+networks:
+  decoder_network:
+    driver: bridge
+
+volumes:
+  output_data:
+    driver: local
