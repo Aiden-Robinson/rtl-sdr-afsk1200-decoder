@@ -1,11 +1,9 @@
-version: "3.8"
-
 services:
   rtl-decoder:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: afsk_decoder
+    container_name: digital_signal_explorer
     stdin_open: true
     tty: true
     privileged: true
@@ -25,8 +23,8 @@ services:
       # SINGLE SOURCE OF TRUTH FOR DEFAULT VALUES
       # ==============================================
       # Change these values here to update defaults for the entire application
-      # Default frequency for AFSK1200 decoding
-      - DEFAULT_FREQ=460.800M
+      # Default frequency for digital signal exploration
+      - DEFAULT_FREQ=472.5485M
       # Default sample rate (2.4 MSPS)
       - DEFAULT_SAMPLE_RATE=2400000
     working_dir: /app

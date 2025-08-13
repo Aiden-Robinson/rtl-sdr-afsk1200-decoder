@@ -1,15 +1,18 @@
 #!/bin/bash
 
-# Complete AFSK1200 Decoding Pipeline
+# Complete Digital Signal Exploration Pipeline
 # This script runs the complete pipeline from RTL-SDR capture to decoded output
+# Supports multiple demodulation modes and decoder types
 
 set -e  # Exit on any error
 
 # Default values - configured in docker-compose.yml
 FREQ=${1:-$DEFAULT_FREQ}
-DURATION=${2:-60}
-OUTPUT_DIR=${3:-"/app/output"}
-SAMPLE_RATE=${4:-$DEFAULT_SAMPLE_RATE}
+DEMOD_MODE=${2:-"fm"}     # fm, lsb, usb, am, raw
+DURATION=${3:-60}
+DECODER_TYPE=${4:-"auto"} # auto, afsk, psk, rtty, cw, fsk, all
+OUTPUT_DIR=${5:-"/app/output"}
+SAMPLE_RATE=${6:-$DEFAULT_SAMPLE_RATE}
 
 # Validate required environment variables
 if [ -z "$FREQ" ]; then
@@ -32,10 +35,12 @@ SESSION_DIR="$OUTPUT_DIR/session_$TIMESTAMP"
 mkdir -p "$SESSION_DIR"
 
 echo "==============================================="
-echo "RTL-SDR AFSK1200 Complete Decoding Pipeline"
+echo "RTL-SDR Digital Signal Exploration Pipeline"
 echo "==============================================="
 echo "Frequency: $FREQ"
+echo "Demodulation: $DEMOD_MODE"
 echo "Duration: $DURATION seconds"
+echo "Decoder: $DECODER_TYPE"
 echo "Sample Rate: $SAMPLE_RATE Hz"
 echo "Session: $TIMESTAMP"
 echo "Output Directory: $SESSION_DIR"
@@ -43,20 +48,20 @@ echo "==============================================="
 
 # Step 1: Capture audio from RTL-SDR
 echo ""
-echo "STEP 1: Capturing audio from RTL-SDR..."
+echo "STEP 1: Capturing signal from RTL-SDR..."
 AUDIO_FILE="$SESSION_DIR/capture_$TIMESTAMP.wav"
-if /app/scripts/rtl_to_wav.sh "$FREQ" "$SAMPLE_RATE" "$DURATION" "$SESSION_DIR" "capture_$TIMESTAMP.wav"; then
-    echo "✓ Audio capture completed successfully"
+if /app/scripts/rtl_to_wav.sh "$FREQ" "$DEMOD_MODE" "$SAMPLE_RATE" "$DURATION" "$SESSION_DIR" "capture_$TIMESTAMP.wav"; then
+    echo "✓ Signal capture completed successfully"
 else
-    echo "✗ Audio capture failed"
+    echo "✗ Signal capture failed"
     exit 1
 fi
 
-# Step 2: Decode AFSK1200 signals
+# Step 2: Decode digital signals
 echo ""
-echo "STEP 2: Decoding AFSK1200 signals..."
+echo "STEP 2: Decoding digital signals..."
 DECODED_FILE="$SESSION_DIR/decoded_$TIMESTAMP.txt"
-if /app/scripts/decode_afsk.sh "$AUDIO_FILE" "$DECODED_FILE"; then
+if /app/scripts/decode_digital.sh "$AUDIO_FILE" "$DECODED_FILE" "$DECODER_TYPE"; then
     echo "✓ Signal decoding completed successfully"
 else
     echo "✗ Signal decoding failed"
@@ -113,16 +118,19 @@ if [ "$MESSAGE_COUNT" -gt 0 ]; then
 else
     echo ""
     echo "⚠️  No messages were decoded. This could be due to:"
-    echo "   - No AFSK1200 signals present on $FREQ"
+    echo "   - No digital signals present on $FREQ"
+    echo "   - Wrong demodulation mode (try: fm, lsb, usb, am)"
     echo "   - Weak signal strength"
-    echo "   - Incorrect frequency"
+    echo "   - Unknown or unsupported signal type"
     echo "   - Hardware issues"
     echo ""
     echo "Try adjusting:"
-    echo "   - Frequency (check local APRS frequency)"
+    echo "   - Frequency (scan around the target frequency)"
+    echo "   - Demodulation mode (fm/lsb/usb/am)"
     echo "   - Duration (longer capture time)"
     echo "   - Antenna positioning"
     echo "   - RTL-SDR gain settings"
+    echo "   - Decoder type (auto/all/specific)"
 fi
 
 echo ""
