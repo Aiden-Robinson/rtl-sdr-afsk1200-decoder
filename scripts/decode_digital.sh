@@ -25,6 +25,41 @@ if [ ! -f "$INPUT_FILE" ]; then
     exit 1
 fi
 
+# Validate input file
+echo "DEBUG: Input file validation..."
+FILE_SIZE=$(stat -c%s "$INPUT_FILE" 2>/dev/null || echo "0")
+echo "  - File exists: $INPUT_FILE"
+echo "  - File size: $FILE_SIZE bytes ($(du -h "$INPUT_FILE" | cut -f1))"
+
+# Check if it's a valid audio file
+if file "$INPUT_FILE" | grep -q "WAVE\|audio"; then
+    echo "  ✓ Audio file format detected"
+    
+    # Try to get audio information
+    if command -v soxi >/dev/null 2>&1 && soxi "$INPUT_FILE" >/dev/null 2>&1; then
+        echo "  ✓ Audio file is readable"
+        echo "  - Duration: $(soxi -D "$INPUT_FILE" 2>/dev/null) seconds"
+        echo "  - Sample rate: $(soxi -r "$INPUT_FILE" 2>/dev/null) Hz"
+        echo "  - Channels: $(soxi -c "$INPUT_FILE" 2>/dev/null)"
+        echo "  - Bit depth: $(soxi -b "$INPUT_FILE" 2>/dev/null) bits"
+    else
+        echo "  ⚠ WARNING: Audio file cannot be read properly"
+        if command -v soxi >/dev/null 2>&1; then
+            soxi "$INPUT_FILE" 2>&1 | head -3 | sed 's/^/    /'
+        fi
+    fi
+else
+    echo "  ⚠ WARNING: File does not appear to be a valid audio file"
+    echo "  - File type: $(file "$INPUT_FILE")"
+fi
+
+# Check if file size is too small
+if [ "$FILE_SIZE" -lt 1000 ]; then
+    echo "  ⚠ WARNING: Input file is very small ($FILE_SIZE bytes)"
+    echo "  - This suggests the audio capture failed"
+    echo "  - Decoding will likely produce no results"
+fi
+
 echo "=== Digital Signal Decoding Started ==="
 echo "Input file: $INPUT_FILE"
 echo "Output file: $OUTPUT_FILE"
@@ -40,17 +75,44 @@ TOTAL_DECODED=0
 # Function to try AFSK decoders
 try_afsk() {
     echo "Trying AFSK1200 decoder (multimon-ng)..."
+    echo "DEBUG: Running multimon-ng -a AFSK1200 -t wav -A -u \"$INPUT_FILE\""
+    
+    # Run multimon-ng with debugging
     multimon-ng -a AFSK1200 -t wav -A -u "$INPUT_FILE" >> "$OUTPUT_FILE" 2>&1
+    MULTIMON_STATUS=$?
+    
+    echo "DEBUG: multimon-ng exit status: $MULTIMON_STATUS"
+    
     AFSK_COUNT=$(grep -c "AFSK1200:" "$OUTPUT_FILE" 2>/dev/null || echo "0")
     echo "  - AFSK1200 packets: $AFSK_COUNT"
     
+    # Show some multimon-ng output for debugging
+    if [ -s "$OUTPUT_FILE" ]; then
+        echo "DEBUG: multimon-ng output (first 10 lines):"
+        head -10 "$OUTPUT_FILE" | sed 's/^/  /'
+    fi
+    
     echo "Trying Direwolf APRS decoder..."
     DIREWOLF_OUTPUT="${OUTPUT_FILE%.*}_direwolf.txt"
+    echo "DEBUG: Running direwolf -t 0 -r 48000 -B 1200 -q d -a 100 \"$INPUT_FILE\""
+    
+    # Run direwolf with debugging
     direwolf -t 0 -r 48000 -B 1200 -q d -a 100 "$INPUT_FILE" > "$DIREWOLF_OUTPUT" 2>&1
+    DIREWOLF_STATUS=$?
+    
+    echo "DEBUG: direwolf exit status: $DIREWOLF_STATUS"
+    
     DIREWOLF_COUNT=$(grep -c "^\[" "$DIREWOLF_OUTPUT" 2>/dev/null || echo "0")
     if [ "$DIREWOLF_COUNT" -gt 0 ]; then
         echo "  - Direwolf packets: $DIREWOLF_COUNT"
         cat "$DIREWOLF_OUTPUT" >> "$OUTPUT_FILE"
+    else
+        echo "  - Direwolf packets: 0"
+        # Show direwolf errors/warnings for debugging
+        if [ -s "$DIREWOLF_OUTPUT" ]; then
+            echo "DEBUG: direwolf output (first 10 lines):"
+            head -10 "$DIREWOLF_OUTPUT" | sed 's/^/  /'
+        fi
     fi
     
     TOTAL_DECODED=$((TOTAL_DECODED + AFSK_COUNT + DIREWOLF_COUNT))

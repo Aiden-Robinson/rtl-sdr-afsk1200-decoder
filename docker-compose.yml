@@ -15,7 +15,7 @@ services:
       - /dev/bus/usb:/dev/bus/usb
     devices:
       # Pass through USB devices (adjust as needed for your RTL-SDR)
-      - /dev/bus/usb
+      - /dev/bus/usb:/dev/bus/usb:rwm
     environment:
       - PYTHONUNBUFFERED=1
       - PYTHONDONTWRITEBYTECODE=1

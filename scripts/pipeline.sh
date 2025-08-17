@@ -49,22 +49,69 @@ echo "==============================================="
 # Step 1: Capture audio from RTL-SDR
 echo ""
 echo "STEP 1: Capturing signal from RTL-SDR..."
+echo "DEBUG: Calling rtl_to_wav.sh with parameters:"
+echo "  - Frequency: $FREQ"
+echo "  - Demodulation: $DEMOD_MODE"
+echo "  - Sample Rate: $SAMPLE_RATE"
+echo "  - Duration: $DURATION"
+echo "  - Session Dir: $SESSION_DIR"
+echo "  - Output File: capture_$TIMESTAMP.wav"
+
 AUDIO_FILE="$SESSION_DIR/capture_$TIMESTAMP.wav"
 if /app/scripts/rtl_to_wav.sh "$FREQ" "$DEMOD_MODE" "$SAMPLE_RATE" "$DURATION" "$SESSION_DIR" "capture_$TIMESTAMP.wav"; then
     echo "✓ Signal capture completed successfully"
+    
+    # Additional validation
+    echo "DEBUG: Post-capture validation..."
+    if [ -f "$AUDIO_FILE" ]; then
+        AUDIO_SIZE=$(stat -c%s "$AUDIO_FILE" 2>/dev/null || echo "0")
+        echo "  - Audio file size: $AUDIO_SIZE bytes"
+        if [ "$AUDIO_SIZE" -lt 1000 ]; then
+            echo "  ⚠ WARNING: Audio file is very small, capture may have failed"
+        fi
+    else
+        echo "  ✗ ERROR: Audio file was not created: $AUDIO_FILE"
+        exit 1
+    fi
 else
     echo "✗ Signal capture failed"
+    echo "DEBUG: rtl_to_wav.sh returned non-zero exit status"
     exit 1
 fi
 
 # Step 2: Decode digital signals
 echo ""
 echo "STEP 2: Decoding digital signals..."
+echo "DEBUG: Calling decode_digital.sh with parameters:"
+echo "  - Input file: $AUDIO_FILE"
+echo "  - Output file: $DECODED_FILE"
+echo "  - Decoder type: $DECODER_TYPE"
+
 DECODED_FILE="$SESSION_DIR/decoded_$TIMESTAMP.txt"
 if /app/scripts/decode_digital.sh "$AUDIO_FILE" "$DECODED_FILE" "$DECODER_TYPE"; then
     echo "✓ Signal decoding completed successfully"
+    
+    # Check decoder output
+    echo "DEBUG: Post-decode validation..."
+    if [ -f "$DECODED_FILE" ]; then
+        DECODED_SIZE=$(stat -c%s "$DECODED_FILE" 2>/dev/null || echo "0")
+        echo "  - Decoded file size: $DECODED_SIZE bytes"
+        
+        # Count potential decoded messages
+        MSG_COUNT=$(grep -E "(AFSK1200:|APRS:|PSK31:|RTTY:|MORSE:)" "$DECODED_FILE" 2>/dev/null | wc -l || echo "0")
+        echo "  - Potential decoded messages: $MSG_COUNT"
+        
+        if [ "$MSG_COUNT" -eq 0 ] && [ "$DECODED_SIZE" -gt 100 ]; then
+            echo "  - Decoder output preview (first 10 lines):"
+            head -10 "$DECODED_FILE" | sed 's/^/    /'
+        fi
+    else
+        echo "  ✗ ERROR: Decoded file was not created: $DECODED_FILE"
+        exit 1
+    fi
 else
     echo "✗ Signal decoding failed"
+    echo "DEBUG: decode_digital.sh returned non-zero exit status"
     exit 1
 fi
 
